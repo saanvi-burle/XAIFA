@@ -1,0 +1,5 @@
+image_path,true_label
+images/cat_1.png,cat
+images/cat_2.png,cat
+images/dog_1.png,dog
+images/dog_2.png,dog
