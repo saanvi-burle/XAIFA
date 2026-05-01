@@ -12,14 +12,34 @@ function Upload() {
     if (!modelFile) return
     setUploading(true)
     const formData = new FormData()
-    formData.append('file', modelFile)
-    
+
+    formData.append('model_file', modelFile)
+
+    // ✅ FIXED (case-safe)
+    formData.append(
+      'model_format',
+      modelFile.name.toLowerCase().endsWith('.pt') ? 'torchscript' : 'pytorch_state_dict'
+      
+    )
+
+    formData.append('architecture', 'resnet18')
+    formData.append('input_width', '224')
+    formData.append('input_height', '224')
+    formData.append('channels', '3')
+    formData.append('num_classes', '2')
+
     try {
       const res = await axios.post('/api/models/upload', formData)
       setMessage(`Model uploaded: ${res.data.model_id}`)
     } catch (err: any) {
-      setMessage(`Error: ${err.response?.data?.detail || err.message}`)
+      const errorMsg =
+        err.response?.data?.detail
+          ? JSON.stringify(err.response.data.detail)
+          : err.message
+
+      setMessage(`Error: ${errorMsg}`)
     }
+
     setUploading(false)
   }
 
@@ -27,17 +47,26 @@ function Upload() {
     if (!datasetFile) return
     setUploading(true)
     const formData = new FormData()
-    formData.append('file', datasetFile)
-    if (labels) {
-      formData.append('labels', labels)
-    }
-    
+
+    formData.append('dataset_file', datasetFile)
+
+    formData.append(
+      'dataset_format',
+      datasetFile.name.endsWith('.csv') ? 'csv_zip' : 'folder_zip'
+    )
+
     try {
       const res = await axios.post('/api/datasets/upload', formData)
       setMessage(`Dataset uploaded: ${res.data.dataset_id}`)
     } catch (err: any) {
-      setMessage(`Error: ${err.response?.data?.detail || err.message}`)
+      const errorMsg =
+        err.response?.data?.detail
+          ? JSON.stringify(err.response.data.detail)
+          : err.message
+
+      setMessage(`Error: ${errorMsg}`)
     }
+
     setUploading(false)
   }
 
