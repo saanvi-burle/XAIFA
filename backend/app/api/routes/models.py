@@ -23,6 +23,9 @@ async def upload_model(
     channels: int = Form(...),
     num_classes: int = Form(...),
 ) -> ModelUploadResponse:
+    print("[DEBUG] upload_model endpoint called")
+    print(f"model_file: {getattr(model_file, 'filename', None)}")
+    print(f"model_format: {model_format}, architecture: {architecture}, input_width: {input_width}, input_height: {input_height}, channels: {channels}, num_classes: {num_classes}")
     try:
         return await save_uploaded_model(
             model_file=model_file,
@@ -34,7 +37,13 @@ async def upload_model(
             num_classes=num_classes,
         )
     except ModelUploadError as exc:
+        print(f"ModelUploadError: {exc}")
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        import traceback
+        print("Unexpected error in upload_model:", exc)
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Internal server error. See backend logs.") from exc
 
 
 @router.post("/{model_id}/validate", response_model=ModelValidationResponse)

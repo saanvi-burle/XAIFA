@@ -1,6 +1,18 @@
 import { useState, useEffect } from 'react'
 import axios from 'axios'
 
+interface RunSummary {
+  run_id: string
+  model_id: string
+  dataset_id: string
+  total_samples: number
+  correct_predictions: number
+  failed_predictions: number
+  accuracy: number
+  created_at: string
+  status: string
+}
+
 interface Failure {
   failure_id: string
   sample_id: string
@@ -10,16 +22,14 @@ interface Failure {
   confidence: number
 }
 
-interface Run {
-  run_id: string
-  failures: Failure[]
-}
-
 function Failures() {
-  const [runs, setRuns] = useState<Run[]>([])
+  const [runs, setRuns] = useState<RunSummary[]>([])
   const [selectedRun, setSelectedRun] = useState<string>('')
-  const [loading, setLoading] = useState(true)
+  const [failures, setFailures] = useState<Failure[]>([])
+  const [loadingRuns, setLoadingRuns] = useState(true)
+  const [loadingFailures, setLoadingFailures] = useState(false)
 
+  // Load run list on mount
   useEffect(() => {
     axios.get('/api/runs')
       .then(res => {
@@ -27,41 +37,63 @@ function Failures() {
         if (res.data.length > 0) {
           setSelectedRun(res.data[0].run_id)
         }
-        setLoading(false)
+        setLoadingRuns(false)
       })
-      .catch(() => setLoading(false))
+      .catch(() => setLoadingRuns(false))
   }, [])
 
-  const currentRun = runs.find(r => r.run_id === selectedRun)
+  // Load failures whenever selected run changes
+  useEffect(() => {
+    if (!selectedRun) {
+      setFailures([])
+      return
+    }
+    setLoadingFailures(true)
+    axios.get(`/api/runs/${selectedRun}/failures`)
+      .then(res => {
+        setFailures(res.data)
+        setLoadingFailures(false)
+      })
+      .catch(() => {
+        setFailures([])
+        setLoadingFailures(false)
+      })
+  }, [selectedRun])
 
   return (
     <div>
       <h2 style={{ marginBottom: '1.5rem' }}>Failure Analysis</h2>
-      
+
       <div className="card">
         <h3>Select Analysis Run</h3>
-        <div className="form-group">
-          <select 
-            value={selectedRun}
-            onChange={e => setSelectedRun(e.target.value)}
-            style={{ maxWidth: '400px' }}
-          >
-            {runs.map(run => (
-              <option key={run.run_id} value={run.run_id}>
-                {run.run_id.slice(0, 8)}... ({run.failures.length} failures)
-              </option>
-            ))}
-          </select>
-        </div>
+        {loadingRuns ? (
+          <div className="loading">Loading runs...</div>
+        ) : runs.length === 0 ? (
+          <p style={{ color: 'var(--text-muted)' }}>No runs yet. Run an analysis first.</p>
+        ) : (
+          <div className="form-group">
+            <select
+              value={selectedRun}
+              onChange={e => setSelectedRun(e.target.value)}
+              style={{ maxWidth: '400px' }}
+            >
+              {runs.map(run => (
+                <option key={run.run_id} value={run.run_id}>
+                  {run.run_id.slice(0, 8)}... ({run.failed_predictions} failures)
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
-      {loading ? (
+      {loadingFailures ? (
         <div className="loading">
           <div className="spinner"></div>
         </div>
-      ) : currentRun ? (
+      ) : failures.length > 0 ? (
         <div className="card">
-          <h3>Failed Predictions ({currentRun.failures.length} cases)</h3>
+          <h3>Failed Predictions ({failures.length} cases)</h3>
           <table className="table">
             <thead>
               <tr>
@@ -74,7 +106,7 @@ function Failures() {
               </tr>
             </thead>
             <tbody>
-              {currentRun.failures.map(failure => (
+              {failures.map(failure => (
                 <tr key={failure.failure_id}>
                   <td>{failure.failure_id}</td>
                   <td>
@@ -97,13 +129,13 @@ function Failures() {
             </tbody>
           </table>
         </div>
-      ) : (
+      ) : selectedRun ? (
         <div className="card">
           <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2rem' }}>
-            No failures to display. Run an analysis first.
+            No failures recorded for this run.
           </p>
         </div>
-      )}
+      ) : null}
 
       <div className="card">
         <h3>XAI Explanation Methods</h3>
