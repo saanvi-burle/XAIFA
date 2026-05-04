@@ -1,6 +1,7 @@
 import torch.nn as nn
 
 class SimpleCNN(nn.Module):
+
     def __init__(self):
         super().__init__()
 
@@ -14,7 +15,9 @@ class SimpleCNN(nn.Module):
         x = self.conv(x)
 
         self.feature_maps = x
-        x.retain_grad()
+
+        if x.requires_grad:
+            x.retain_grad()
 
         x = self.relu(x)
         x = x.view(x.size(0), -1)

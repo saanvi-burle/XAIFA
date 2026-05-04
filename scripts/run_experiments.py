@@ -26,10 +26,21 @@ failures = torch.load("data/failures.pt")
 
 gradcam = GradCAM(model)
 background = torch.stack([f[0] for f in failures[:50]]).to(device)
+background = background.squeeze()         # remove extra dims if any
+background = background.unsqueeze(1)      # ensure [B,1,28,28]
+
+if background.dim() == 5:
+    background = background.squeeze(1)
 shap_exp = ShapExplainer(model, background)
 
 def predict_fn(x):
-    x = torch.tensor(x).permute(0,3,1,2).float().to(device)
+    import torch
+
+    x = torch.tensor(x).permute(0,3,1,2).float().to(device)  # [B,3,H,W]
+
+    # convert RGB → grayscale
+    x = x.mean(dim=1, keepdim=True)  # [B,1,H,W]
+
     return model(x).detach().cpu().numpy()
 
 lime_exp = LimeExplainer(predict_fn)
@@ -43,11 +54,24 @@ metrics = {k: {"f":[], "s":[], "t":[], "i":[]} for k in methods}
 
 for img, lbl, pred in failures[:200]:
 
-    img = img.unsqueeze(0).to(device)
+    # Ensure correct shape ALWAYS
+    img = img.to(device)
+
+    # Remove ALL extra dimensions safely
+    img = img.squeeze()
+
+    # Now rebuild correct shape [1,1,28,28]
+    img = img.unsqueeze(0).unsqueeze(0)
 
     g = gradcam.generate(img, pred)
     s = shap_exp.generate(img)
-    l = lime_exp.generate(img.cpu().numpy()[0].transpose(1,2,0))
+    img_np = img.cpu().numpy()[0]        # [1,28,28]
+    img_np = img_np.transpose(1,2,0)     # [28,28,1]
+
+    # convert to RGB (repeat channel)
+    img_rgb = np.repeat(img_np, 3, axis=2)   # [28,28,3]
+
+    l = lime_exp.generate(img_rgb)
 
     outputs = {
         "gradcam": cmb.gradcam_only(g),

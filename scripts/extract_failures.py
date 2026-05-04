@@ -14,12 +14,15 @@ failures = []
 
 for i in range(len(dataset)):
     image, label = dataset[i]
-    image = image.unsqueeze(0).to(device)
 
-    pred = model(image).argmax().item()
+    # ONLY for prediction (temporary batch)
+    input_img = image.unsqueeze(0).to(device)
+
+    pred = model(input_img).argmax().item()
 
     if pred != label:
-        failures.append((image.cpu(), label, pred))
+        # ✅ STORE ORIGINAL IMAGE (NO unsqueeze)
+        failures.append((image, label, pred))
 
 torch.save(failures, "data/failures.pt")
 print("Failures saved:", len(failures))
