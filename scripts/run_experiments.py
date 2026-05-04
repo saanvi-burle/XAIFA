@@ -15,6 +15,17 @@ from evaluation.clustering import clustering
 from evaluation.interpretability import interpretability
 from evaluation.scoring import final_score
 
+from visualization.plots import (
+    show_failures_grid,
+    show_all_methods_full,
+    overlay,
+    plot_pca,
+    plot_tsne,
+    lime_to_curve,
+    plot_lime_curve,
+    overlay_curve_on_image
+)
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # load model
@@ -23,14 +34,18 @@ model.load_state_dict(torch.load("models/mnist_model.pth"))
 model.eval()
 
 failures = torch.load("data/failures.pt")
+# show_failures_grid(failures, n=8)
 
 gradcam = GradCAM(model)
 background = torch.stack([f[0] for f in failures[:50]]).to(device)
-background = background.squeeze()         # remove extra dims if any
-background = background.unsqueeze(1)      # ensure [B,1,28,28]
 
 if background.dim() == 5:
     background = background.squeeze(1)
+
+# ensure shape [B,1,28,28]
+if background.dim() == 3:
+    background = background.unsqueeze(1)
+
 shap_exp = ShapExplainer(model, background)
 
 def predict_fn(x):
@@ -52,37 +67,71 @@ methods = {
 
 metrics = {k: {"f":[], "s":[], "t":[], "i":[]} for k in methods}
 
-for img, lbl, pred in failures[:200]:
+for img, lbl, pred in failures[:100]:
 
-    # Ensure correct shape ALWAYS
-    img = img.to(device)
+    # -------- Prepare image [1,1,28,28] --------
+    img = img.to(device).squeeze().unsqueeze(0).unsqueeze(0)
 
-    # Remove ALL extra dimensions safely
-    img = img.squeeze()
+    # -------- Base explanations --------
+    g = gradcam.generate(img, pred)          # (28,28)
+    s = shap_exp.generate(img)               # (28,28)
 
-    # Now rebuild correct shape [1,1,28,28]
-    img = img.unsqueeze(0).unsqueeze(0)
-
-    g = gradcam.generate(img, pred)
-    s = shap_exp.generate(img)
-    img_np = img.cpu().numpy()[0]        # [1,28,28]
-    img_np = img_np.transpose(1,2,0)     # [28,28,1]
-
-    # convert to RGB (repeat channel)
+    img_np = img.cpu().numpy()[0]            # [1,28,28]
+    img_np = img_np.transpose(1,2,0)         # [28,28,1]
     img_rgb = np.repeat(img_np, 3, axis=2)   # [28,28,3]
 
-    l = lime_exp.generate(img_rgb)
+    l = lime_exp.generate(img_rgb)           # (28,28)
 
+    print("LIME:", l.min(), l.max())
+
+    # -------- Show once --------
+    if len(methods["gradcam"]) == 0:
+        # show main XAI methods
+        show_all_methods_full(img.cpu(), g, s, l, cmb)
+
+        combined = cmb.all_three(g, s, l)
+        overlay(img.cpu(), combined, "combined_overlay")
+
+        # -------- LIME as curve --------
+        curve = lime_to_curve(l)
+
+        plot_lime_curve(curve)
+        overlay_curve_on_image(img.cpu(), curve)
+
+    # -------- Clean outputs (7 methods) --------
     outputs = {
         "gradcam": cmb.gradcam_only(g),
         "shap": cmb.shap_only(s),
         "lime": cmb.lime_only(l),
-        "g+s": cmb.g_s(g,s),
-        "g+l": cmb.g_l(g,l),
-        "s+l": cmb.s_l(s,l),
-        "all": cmb.all_three(g,s,l)
+        "g+s": cmb.g_s(g, s),
+        "g+l": cmb.g_l(g, l),
+        "s+l": cmb.s_l(s, l),
+        "all": cmb.all_three(g, s, l)
     }
 
+    # -------- NOISY (compute ONCE) --------
+    noisy = img + 0.01 * torch.randn_like(img)
+
+    g_noisy = gradcam.generate(noisy, pred)
+
+    # SHAP reuse (fast + stable)
+    s_noisy = shap_exp.generate(img)
+
+    noisy_np = noisy.cpu().numpy()[0].transpose(1,2,0)
+    noisy_rgb = np.repeat(noisy_np, 3, axis=2)
+    l_noisy = lime_exp.generate(noisy_rgb)
+
+    noisy_outputs = {
+        "gradcam": cmb.gradcam_only(g_noisy),
+        "shap": cmb.shap_only(s_noisy),
+        "lime": cmb.lime_only(l_noisy),
+        "g+s": cmb.g_s(g_noisy, s_noisy),
+        "g+l": cmb.g_l(g_noisy, l_noisy),
+        "s+l": cmb.s_l(s_noisy, l_noisy),
+        "all": cmb.all_three(g_noisy, s_noisy, l_noisy)
+    }
+
+    # -------- Metrics per method --------
     for k, exp in outputs.items():
 
         start = time.time()
@@ -90,11 +139,8 @@ for img, lbl, pred in failures[:200]:
         f = fidelity(model, img, exp, pred)
         i = interpretability(exp)
 
-        # stability (add noise)
-        noisy = img + 0.01*torch.randn_like(img)
-        noisy_exp = exp  # simple reuse for now
-
-        s_score = 1  # optional skip heavy calc
+        noisy_exp = noisy_outputs[k]
+        s_score = stability(exp, noisy_exp)
 
         t = time.time() - start
 
@@ -103,7 +149,6 @@ for img, lbl, pred in failures[:200]:
         metrics[k]["s"].append(s_score)
         metrics[k]["t"].append(t)
         metrics[k]["i"].append(i)
-
 # final table
 rows = []
 
@@ -132,3 +177,7 @@ df = pd.DataFrame(rows).sort_values("Score", ascending=False)
 df.to_csv("results/final_results.csv", index=False)
 
 print(df)
+
+plot_pca(methods["all"], "Combined")
+plot_pca(methods["gradcam"], "GradCAM")
+plot_tsne(methods["all"], "Combined")

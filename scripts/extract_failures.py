@@ -1,28 +1,29 @@
-import torch
-from torchvision import datasets, transforms
-from models.cnn_model import SimpleCNN
+import numpy as np
+from lime import lime_image
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+class LimeExplainer:
 
-model = SimpleCNN().to(device)
-model.load_state_dict(torch.load("models/mnist_model.pth"))
-model.eval()
+    def __init__(self, predict_fn):
+        self.explainer = lime_image.LimeImageExplainer()
+        self.predict_fn = predict_fn
 
-dataset = datasets.MNIST('./data', train=False, transform=transforms.ToTensor())
+    def generate(self, image):
 
-failures = []
+        explanation = self.explainer.explain_instance(
+            image,
+            self.predict_fn,
+            top_labels=1,
+            hide_color=0,
+            num_samples=100
+        )
 
-for i in range(len(dataset)):
-    image, label = dataset[i]
+        # extract weights only
+        weights = list(explanation.local_exp.values())[0]
+        vals = np.array([abs(w[1]) for w in weights])
 
-    # ONLY for prediction (temporary batch)
-    input_img = image.unsqueeze(0).to(device)
+        score = vals.mean()
 
-    pred = model(input_img).argmax().item()
+        # create uniform map scaled by importance
+        heatmap = np.ones((28,28)) * score
 
-    if pred != label:
-        # ✅ STORE ORIGINAL IMAGE (NO unsqueeze)
-        failures.append((image, label, pred))
-
-torch.save(failures, "data/failures.pt")
-print("Failures saved:", len(failures))
+        return heatmap
