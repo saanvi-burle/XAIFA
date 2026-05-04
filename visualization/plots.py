@@ -128,39 +128,27 @@ def plot_tsne(features, title):
     plt.savefig(f"results/{title}_tsne.png")
     plt.show()
 
-def lime_to_curve(lime_map):
-    """
-    Convert 2D LIME map → 1D importance curve
-    """
-    curve = np.sum(lime_map, axis=0)  # column-wise importance
-    curve = (curve - curve.min()) / (curve.max() + 1e-8)
-    return curve
+def show_best_vs_all(image, g, s, l, cmb):
 
+    image = image.squeeze().cpu().numpy()
 
-def plot_lime_curve(curve, title="LIME Focus Curve"):
-    plt.figure()
-    plt.plot(curve, linewidth=2)
-    plt.title(title)
-    plt.xlabel("Image Width (pixels)")
-    plt.ylabel("Importance")
-    plt.grid()
-    plt.show()
+    best = cmb.g_s(g, s)
+    all_map = cmb.all_three(g, s, l)
 
+    fig, axs = plt.subplots(1, 3, figsize=(9,3))
 
-def overlay_curve_on_image(img, curve):
-    """
-    Overlay LIME curve on grayscale image
-    """
-    img = img.squeeze().numpy()
+    axs[0].imshow(image, cmap='gray')
+    axs[0].set_title("Original")
 
-    plt.figure()
-    plt.imshow(img, cmap='gray')
+    axs[1].imshow(best, cmap='jet')
+    axs[1].set_title("Best (G+S)")
 
-    h = img.shape[0]
-    curve_scaled = curve * h  # scale to image height
+    axs[2].imshow(all_map, cmap='jet')
+    axs[2].set_title("All (+LIME)")
 
-    plt.plot(range(len(curve)), curve_scaled, color='red', linewidth=2)
+    for ax in axs:
+        ax.axis('off')
 
-    plt.title("LIME Focus Overlay")
-    plt.axis('off')
+    plt.tight_layout()
+    plt.savefig("results/best_vs_all.png")
     plt.show()

@@ -17,13 +17,10 @@ from evaluation.scoring import final_score
 
 from visualization.plots import (
     show_failures_grid,
-    show_all_methods_full,
-    overlay,
+    show_best_vs_all,
     plot_pca,
     plot_tsne,
-    lime_to_curve,
-    plot_lime_curve,
-    overlay_curve_on_image
+    show_all_methods_full
 )
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -84,17 +81,12 @@ for img, lbl, pred in failures[:100]:
 
     # -------- Show once --------
     if len(methods["gradcam"]) == 0:
-        # show main XAI methods
+
+        # -------- FIGURE 1: ALL METHODS --------
         show_all_methods_full(img.cpu(), g, s, l, cmb)
 
-        combined = cmb.all_three(g, s, l)
-        overlay(img.cpu(), combined, "combined_overlay")
-
-        # -------- LIME as curve --------
-        curve = lime_to_curve(l)
-
-        plot_lime_curve(curve)
-        overlay_curve_on_image(img.cpu(), curve)
+        # -------- FIGURE 2: BEST vs ALL --------
+        show_best_vs_all(img.cpu(), g, s, l, cmb)
 
     # -------- Clean outputs (7 methods) --------
     outputs = {
