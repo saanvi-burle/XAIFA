@@ -34,7 +34,7 @@ model.load_state_dict(torch.load("models/mnist_model.pth"))
 model.eval()
 
 failures = torch.load("data/failures.pt")
-# show_failures_grid(failures, n=8)
+show_failures_grid(failures, n=8)
 
 gradcam = GradCAM(model)
 background = torch.stack([f[0] for f in failures[:50]]).to(device)
@@ -81,8 +81,6 @@ for img, lbl, pred in failures[:100]:
     img_rgb = np.repeat(img_np, 3, axis=2)   # [28,28,3]
 
     l = lime_exp.generate(img_rgb)           # (28,28)
-
-    print("LIME:", l.min(), l.max())
 
     # -------- Show once --------
     if len(methods["gradcam"]) == 0:
