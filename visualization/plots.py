@@ -107,3 +107,27 @@ def plot_pca(features, title):
     plt.savefig(f"results/{title}_pca.png")
     plt.show()
 
+def show_best_vs_all(image, g, s, l, cmb):
+
+    image = image.squeeze().cpu().numpy()
+
+    best = cmb.g_s(g, s)
+    all_map = cmb.all_three(g, s, l)
+
+    fig, axs = plt.subplots(1, 3, figsize=(9,3))
+
+    axs[0].imshow(image, cmap='gray')
+    axs[0].set_title("Original")
+
+    axs[1].imshow(best, cmap='jet')
+    axs[1].set_title("Best (G+S)")
+
+    axs[2].imshow(all_map, cmap='jet')
+    axs[2].set_title("All (+LIME)")
+
+    for ax in axs:
+        ax.axis('off')
+
+    plt.tight_layout()
+    plt.savefig("results/best_vs_all.png")
+    plt.show()
