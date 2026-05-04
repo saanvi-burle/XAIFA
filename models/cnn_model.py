@@ -1,36 +1,23 @@
-# ============================================
-# cnn_model.py
-# Updated for Grad-CAM support
-# ============================================
-
 import torch.nn as nn
-import torch.nn.functional as F
-
 
 class SimpleCNN(nn.Module):
-
     def __init__(self):
         super().__init__()
 
-        # convolution layer
         self.conv = nn.Conv2d(1, 16, 3)
-
-        # activation
         self.relu = nn.ReLU()
+        self.fc = nn.Linear(26*26*16, 10)
 
-        # classifier
-        self.fc = nn.Linear(26 * 26 * 16, 10)
+        self.feature_maps = None
 
     def forward(self, x):
-
-        # save conv output (important for Grad-CAM)
         x = self.conv(x)
+
+        self.feature_maps = x
+        x.retain_grad()
+
         x = self.relu(x)
-
-        # flatten
         x = x.view(x.size(0), -1)
-
-        # classification
         x = self.fc(x)
 
         return x
