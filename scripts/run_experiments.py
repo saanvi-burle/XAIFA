@@ -19,7 +19,6 @@ from visualization.plots import (
     show_failures_grid,
     show_best_vs_all,
     plot_pca,
-    plot_tsne,
     show_all_methods_full
 )
 
