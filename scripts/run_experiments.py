@@ -168,6 +168,5 @@ df.to_csv("results/final_results.csv", index=False)
 
 print(df)
 
+plot_pca(methods["g+s"], "GradCAM+SHAP")
 plot_pca(methods["all"], "Combined")
-plot_pca(methods["gradcam"], "GradCAM")
-plot_tsne(methods["all"], "Combined")
