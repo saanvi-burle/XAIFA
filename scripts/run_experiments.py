@@ -22,6 +22,10 @@ from visualization.plots import (
     show_all_methods_full
 )
 
+from recommendation.adaptive_recommend import (
+    generate_adaptive_recommendations
+)
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # load model
@@ -62,6 +66,15 @@ methods = {
 }
 
 metrics = {k: {"f":[], "s":[], "t":[], "i":[]} for k in methods}
+all_explanations = {
+    "gradcam": [],
+    "shap": [],
+    "lime": [],
+    "g+s": [],
+    "g+l": [],
+    "s+l": [],
+    "all": []
+}
 
 for img, lbl, pred in failures[:100]:
 
@@ -138,6 +151,9 @@ for img, lbl, pred in failures[:100]:
         metrics[k]["s"].append(s_score)
         metrics[k]["t"].append(t)
         metrics[k]["i"].append(i)
+    
+    for method_name, exp in outputs.items():
+        all_explanations[method_name].append(exp)
 # final table
 rows = []
 
@@ -167,5 +183,30 @@ df.to_csv("results/final_results.csv", index=False)
 
 print(df)
 
-plot_pca(methods["g+s"], "GradCAM+SHAP")
+# ============================================
+# SELECT BEST METHOD
+# ============================================
+
+best_method = df.iloc[0]["Method"]
+
+print("\nBest explanation method:", best_method)
+
+selected_explanations = all_explanations[best_method]
+
+
+# ============================================
+# GENERATE ADAPTIVE RECOMMENDATIONS
+# ============================================
+
+recs = generate_adaptive_recommendations(
+    selected_explanations,
+    best_method
+)
+
+print("\n===== XAIFA RECOMMENDATIONS =====")
+
+for r in recs:
+    print("-", r)
+    
+plot_pca(methods[best_method], f"Best_{best_method}")
 plot_pca(methods["all"], "Combined")
