@@ -264,4 +264,17 @@ def generate_adaptive_recommendations(
             "Minor optimization and augmentation tuning are recommended.\n"
         )
 
-    return recs
+    # ========================================
+    # FEATURE SUMMARY
+    # ========================================
+
+    feature_summary = {
+        "Entropy": ent,
+        "Concentration": conc,
+        "Sparsity": sparse,
+        "EdgeAttention": edge,
+        "Fragmentation": frag,
+        "Sharpness": sharp
+    }
+
+    return recs, feature_summary
