@@ -198,15 +198,36 @@ selected_explanations = all_explanations[best_method]
 # GENERATE ADAPTIVE RECOMMENDATIONS
 # ============================================
 
-recs = generate_adaptive_recommendations(
+recs, feature_summary = generate_adaptive_recommendations(
     selected_explanations,
     best_method
+)
+
+feature_df = pd.DataFrame([feature_summary])
+
+feature_df.to_csv(
+    "results/recommendation_features.csv",
+    index=False
 )
 
 print("\n===== XAIFA RECOMMENDATIONS =====")
 
 for r in recs:
     print("-", r)
-    
+
+# ============================================
+# SAVE RECOMMENDATIONS
+# ============================================
+
+with open("results/recommendations.txt", "w") as f:
+
+    f.write("===== XAIFA RECOMMENDATIONS =====\n\n")
+
+    f.write(f"Best explanation method: {best_method}\n\n")
+
+    for i, r in enumerate(recs, 1):
+
+        f.write(f"{i}. {r}\n")
+
 plot_pca(methods[best_method], f"Best_{best_method}")
 plot_pca(methods["all"], "Combined")

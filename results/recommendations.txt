@@ -1,0 +1,10 @@
+===== XAIFA RECOMMENDATIONS =====
+
+Best explanation method: g+s
+
+1. Hybrid GradCAM+SHAP explanations show reduced concentration.
+Recommendation: improve feature discrimination using curriculum learning.
+
+2. Hybrid explanations remain moderately diffused.
+Recommendation: apply attention-guided regularization.
+
