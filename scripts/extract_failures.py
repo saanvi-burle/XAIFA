@@ -1,29 +1,93 @@
-import numpy as np
-from lime import lime_image
+import sys
+from pathlib import Path
 
-class LimeExplainer:
+# ADD PROJECT ROOT
+ROOT_DIR = Path(__file__).resolve().parents[1]
+sys.path.append(str(ROOT_DIR))
 
-    def __init__(self, predict_fn):
-        self.explainer = lime_image.LimeImageExplainer()
-        self.predict_fn = predict_fn
+import torch
+from torchvision import datasets, transforms
+from torch.utils.data import DataLoader
 
-    def generate(self, image):
+from models.cnn_model import SimpleCNN
 
-        explanation = self.explainer.explain_instance(
-            image,
-            self.predict_fn,
-            top_labels=1,
-            hide_color=0,
-            num_samples=100
-        )
+# =========================
+# DEVICE
+# =========================
+device = torch.device(
+    "cuda" if torch.cuda.is_available() else "cpu"
+)
 
-        # extract weights only
-        weights = list(explanation.local_exp.values())[0]
-        vals = np.array([abs(w[1]) for w in weights])
+# =========================
+# LOAD MODEL
+# =========================
+model = SimpleCNN().to(device)
 
-        score = vals.mean()
+model.load_state_dict(
+    torch.load(
+        ROOT_DIR / "models" / "mnist_model.pth"
+    )
+)
 
-        # create uniform map scaled by importance
-        heatmap = np.ones((28,28)) * score
+model.eval()
 
-        return heatmap
+# =========================
+# DATASET
+# =========================
+transform = transforms.ToTensor()
+
+test_dataset = datasets.MNIST(
+    ROOT_DIR / "data",
+    train=False,
+    download=True,
+    transform=transform
+)
+
+loader = DataLoader(
+    test_dataset,
+    batch_size=1,
+    shuffle=False
+)
+
+# =========================
+# EXTRACT FAILURES
+# =========================
+failures = []
+
+with torch.no_grad():
+
+    for img, lbl in loader:
+
+        img = img.to(device)
+
+        output = model(img)
+
+        pred = output.argmax(dim=1)
+
+        if pred.item() != lbl.item():
+
+            failures.append(
+                (
+                    img.cpu(),
+                    lbl.item(),
+                    pred.item()
+                )
+            )
+
+# =========================
+# SAVE FAILURES
+# =========================
+data_dir = ROOT_DIR / "data"
+
+data_dir.mkdir(exist_ok=True)
+
+torch.save(
+    failures,
+    data_dir / "failures.pt"
+)
+
+print(f"\nSAVED {len(failures)} FAILURES")
+
+print(
+    f" FILE: {data_dir / 'failures.pt'}"
+)

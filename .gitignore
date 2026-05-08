@@ -1,11 +1,36 @@
+# Python
 __pycache__/
-*.py[cod]
+*.pyc
+*.pyo
+*.pyd
+*.pt
+*.pth
+
+# Virtual Environment
 .venv/
 venv/
-.env
-storage/
-uploads/
-outputs/
+
+# Results
+results/
+scripts/results/
+
+# Dataset / generated files
+mnist_images/
 data/
-models/*.pth
-models/*.pt
+storage/
+test_assets/datasets/
+*.zip
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# Vite cache
+frontend/node_modules/.vite/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

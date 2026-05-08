@@ -15,21 +15,26 @@ function Upload() {
 
     formData.append('model_file', modelFile)
 
-    // ✅ FIXED (case-safe)
+    // model format detection
     formData.append(
       'model_format',
-      modelFile.name.toLowerCase().endsWith('.pt') ? 'torchscript' : 'pytorch_state_dict'
-      
+      modelFile.name.toLowerCase().endsWith('.pt')
+        ? 'torchscript'
+        : 'pytorch_state_dict'
     )
 
-    formData.append('architecture', 'resnet18')
-    formData.append('input_width', '224')
-    formData.append('input_height', '224')
-    formData.append('channels', '3')
-    formData.append('num_classes', '2')
+    // 🔥 FIXED VALUES FOR MNIST CNN
+    formData.append('architecture', 'simple_cnn')
+    formData.append('input_width', '28')
+    formData.append('input_height', '28')
+    formData.append('channels', '1')
+    formData.append('num_classes', '10')
 
     try {
       const res = await axios.post('/api/models/upload', formData)
+
+      console.log("UPLOAD RESPONSE:", res.data) // debug
+
       setMessage(`Model uploaded: ${res.data.model_id}`)
     } catch (err: any) {
       const errorMsg =
@@ -73,21 +78,23 @@ function Upload() {
   return (
     <div>
       <h2 style={{ marginBottom: '1.5rem' }}>Upload Model & Dataset</h2>
-      
+
       <div className="card">
         <h3>Upload Model</h3>
         <p style={{ color: 'var(--text-muted)', marginBottom: '1rem' }}>
           Upload a trained PyTorch model (.pt or .pth)
         </p>
+
         <div className="form-group">
-          <input 
-            type="file" 
+          <input
+            type="file"
             accept=".pt,.pth"
             onChange={e => setModelFile(e.target.files?.[0] || null)}
           />
         </div>
-        <button 
-          className="btn btn-primary" 
+
+        <button
+          className="btn btn-primary"
           onClick={handleModelUpload}
           disabled={!modelFile || uploading}
         >
@@ -100,25 +107,33 @@ function Upload() {
         <p style={{ color: 'var(--text-muted)', marginBottom: '1rem' }}>
           Upload a zipped folder dataset or CSV file
         </p>
+
         <div className="form-group">
-          <input 
-            type="file" 
+          <input
+            type="file"
             accept=".zip,.csv"
             onChange={e => setDatasetFile(e.target.files?.[0] || null)}
           />
         </div>
+
         <div className="form-group">
           <label>Class Labels (one per line)</label>
           <textarea
             value={labels}
             onChange={e => setLabels(e.target.value)}
-            placeholder="cat&#10;dog"
+            placeholder="0&#10;1&#10;2&#10;...&#10;9"
             rows={4}
-            style={{ width: '100%', padding: '0.625rem', border: '1px solid var(--border)', borderRadius: '6px' }}
+            style={{
+              width: '100%',
+              padding: '0.625rem',
+              border: '1px solid var(--border)',
+              borderRadius: '6px'
+            }}
           />
         </div>
-        <button 
-          className="btn btn-primary" 
+
+        <button
+          className="btn btn-primary"
           onClick={handleDatasetUpload}
           disabled={!datasetFile || uploading}
         >
@@ -127,7 +142,12 @@ function Upload() {
       </div>
 
       {message && (
-        <div className="card" style={{ background: message.startsWith('Error') ? '#fee2e2' : '#dcfce7' }}>
+        <div
+          className="card"
+          style={{
+            background: message.startsWith('Error') ? '#fee2e2' : '#dcfce7'
+          }}
+        >
           {message}
         </div>
       )}

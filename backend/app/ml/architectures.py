@@ -1,32 +1,54 @@
 from typing import Callable
 
+import torch
 import torch.nn as nn
 from torchvision import models
 
 
+# =========================
+# SIMPLE CNN (FIXED)
+# =========================
 class SimpleCNN(nn.Module):
     def __init__(self, num_classes: int = 10):
         super().__init__()
+
         self.conv = nn.Conv2d(1, 16, 3)
         self.relu = nn.ReLU()
         self.fc = nn.Linear(26 * 26 * 16, num_classes)
 
+        # 🔥 Needed for Grad-CAM
+        self.feature_maps = None
+
     def forward(self, x):
         x = self.conv(x)
+
+        # 🔥 store feature maps
+        self.feature_maps = x
+
+        # 🔥 ensure gradients are retained
+        if x.requires_grad:
+            x.retain_grad()
+
         x = self.relu(x)
         x = x.view(x.size(0), -1)
         return self.fc(x)
 
 
+# =========================
+# HELPERS
+# =========================
 def _replace_linear(module: nn.Module, attr: str, num_classes: int) -> nn.Module:
     old = getattr(module, attr)
     setattr(module, attr, nn.Linear(old.in_features, num_classes))
     return module
 
 
+# =========================
+# BUILDERS
+# =========================
 def build_simple_cnn(num_classes: int, channels: int) -> nn.Module:
     if channels != 1:
-        raise ValueError("simple_cnn currently supports grayscale input only.")
+        raise ValueError("simple_cnn supports only grayscale (1 channel).")
     return SimpleCNN(num_classes=num_classes)
 
 
@@ -68,8 +90,11 @@ def build_efficientnet_b0(num_classes: int, channels: int) -> nn.Module:
     return model
 
 
+# =========================
+# REGISTRY
+# =========================
 ARCHITECTURE_BUILDERS: dict[str, Callable[[int, int], nn.Module]] = {
-    "simple_cnn": build_simple_cnn,
+    "simple_cnn": build_simple_cnn,   # ✅ USE THIS EXACT NAME
     "resnet18": build_resnet18,
     "resnet50": build_resnet50,
     "mobilenet_v2": build_mobilenet_v2,
@@ -78,7 +103,13 @@ ARCHITECTURE_BUILDERS: dict[str, Callable[[int, int], nn.Module]] = {
 }
 
 
+# =========================
+# MAIN ENTRY
+# =========================
 def build_architecture(name: str, num_classes: int, channels: int) -> nn.Module:
+    name = name.lower()
+
     if name not in ARCHITECTURE_BUILDERS:
         raise ValueError(f"Unsupported architecture: {name}")
+
     return ARCHITECTURE_BUILDERS[name](num_classes, channels)
