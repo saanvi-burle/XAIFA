@@ -1,7 +1,9 @@
 import sys
 from pathlib import Path
 
+# ============================================
 # ADD PROJECT ROOT TO PYTHON PATH
+# ============================================
 ROOT_DIR = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT_DIR))
 
@@ -11,9 +13,11 @@ import pandas as pd
 import time
 
 from models.cnn_model import SimpleCNN
+
 from xai.gradcam import GradCAM
 from xai.shap_explainer import ShapExplainer
 from xai.lime_explainer import LimeExplainer
+
 import xai.combine as cmb
 
 from evaluation.fidelity import fidelity
@@ -29,11 +33,26 @@ from visualization.plots import (
     show_all_methods_full
 )
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+from recommendation.adaptive_recommend import (
+    generate_adaptive_recommendations
+)
 
-# =========================
+# ============================================
+# DEVICE
+# ============================================
+device = torch.device(
+    "cuda" if torch.cuda.is_available() else "cpu"
+)
+
+# ============================================
+# RESULTS DIRECTORY
+# ============================================
+RESULTS_DIR = ROOT_DIR / "results"
+RESULTS_DIR.mkdir(exist_ok=True)
+
+# ============================================
 # LOAD MODEL
-# =========================
+# ============================================
 model = SimpleCNN().to(device)
 
 model.load_state_dict(
@@ -44,18 +63,18 @@ model.load_state_dict(
 
 model.eval()
 
-# =========================
+# ============================================
 # LOAD FAILURES
-# =========================
+# ============================================
 failures = torch.load(
     ROOT_DIR / "data" / "failures.pt"
 )
 
 show_failures_grid(failures, n=8)
 
-# =========================
+# ============================================
 # XAI METHODS
-# =========================
+# ============================================
 gradcam = GradCAM(model)
 
 background = torch.stack(
@@ -65,7 +84,6 @@ background = torch.stack(
 if background.dim() == 5:
     background = background.squeeze(1)
 
-# ensure shape [B,1,28,28]
 if background.dim() == 3:
     background = background.unsqueeze(1)
 
@@ -74,27 +92,28 @@ shap_exp = ShapExplainer(
     background
 )
 
+# ============================================
+# PREDICT FUNCTION FOR LIME
+# ============================================
 def predict_fn(x):
-
-    import torch
 
     x = torch.tensor(x).permute(
         0, 3, 1, 2
-    ).float().to(device)  # [B,3,H,W]
+    ).float().to(device)
 
-    # convert RGB → grayscale
+    # RGB -> GRAYSCALE
     x = x.mean(
         dim=1,
         keepdim=True
-    )  # [B,1,H,W]
+    )
 
     return model(x).detach().cpu().numpy()
 
 lime_exp = LimeExplainer(predict_fn)
 
-# =========================
+# ============================================
 # STORAGE
-# =========================
+# ============================================
 methods = {
     "gradcam": [],
     "shap": [],
@@ -115,35 +134,55 @@ metrics = {
     for k in methods
 }
 
-# =========================
+all_explanations = {
+    "gradcam": [],
+    "shap": [],
+    "lime": [],
+    "g+s": [],
+    "g+l": [],
+    "s+l": [],
+    "all": []
+}
+
+# ============================================
 # MAIN LOOP
-# =========================
+# ============================================
 for img, lbl, pred in failures[:100]:
 
-    # -------- Prepare image [1,1,28,28] --------
-    img = img.to(device).squeeze().unsqueeze(0).unsqueeze(0)
+    # ========================================
+    # PREPARE IMAGE
+    # ========================================
+    img = (
+        img.to(device)
+        .squeeze()
+        .unsqueeze(0)
+        .unsqueeze(0)
+    )
 
-    # -------- Base explanations --------
-    g = gradcam.generate(img, pred)          # (28,28)
+    # ========================================
+    # BASE EXPLANATIONS
+    # ========================================
+    g = gradcam.generate(img, pred)
 
-    s = shap_exp.generate(img)               # (28,28)
+    s = shap_exp.generate(img)
 
-    img_np = img.cpu().numpy()[0]            # [1,28,28]
+    img_np = img.cpu().numpy()[0]
 
-    img_np = img_np.transpose(1,2,0)         # [28,28,1]
+    img_np = img_np.transpose(1, 2, 0)
 
     img_rgb = np.repeat(
         img_np,
         3,
         axis=2
-    )   # [28,28,3]
+    )
 
-    l = lime_exp.generate(img_rgb)           # (28,28)
+    l = lime_exp.generate(img_rgb)
 
-    # -------- Show once --------
+    # ========================================
+    # SHOW VISUALS ONCE
+    # ========================================
     if len(methods["gradcam"]) == 0:
 
-        # -------- FIGURE 1: ALL METHODS --------
         show_all_methods_full(
             img.cpu(),
             g,
@@ -152,7 +191,6 @@ for img, lbl, pred in failures[:100]:
             cmb
         )
 
-        # -------- FIGURE 2: BEST vs ALL --------
         show_best_vs_all(
             img.cpu(),
             g,
@@ -161,7 +199,9 @@ for img, lbl, pred in failures[:100]:
             cmb
         )
 
-    # -------- Clean outputs (7 methods) --------
+    # ========================================
+    # COMBINED METHODS
+    # ========================================
     outputs = {
 
         "gradcam": cmb.gradcam_only(g),
@@ -179,15 +219,36 @@ for img, lbl, pred in failures[:100]:
         "all": cmb.all_three(g, s, l)
     }
 
-    # -------- NOISY (compute ONCE) --------
-    noisy = img + 0.01 * torch.randn_like(img)
+    # ========================================
+    # SAVE EXPLANATIONS
+    # ========================================
+    for method_name, exp in outputs.items():
 
-    g_noisy = gradcam.generate(noisy, pred)
+        all_explanations[
+            method_name
+        ].append(exp)
 
-    # SHAP reuse (fast + stable)
+    # ========================================
+    # NOISY INPUT
+    # ========================================
+    noisy = img + (
+        0.01 * torch.randn_like(img)
+    )
+
+    g_noisy = gradcam.generate(
+        noisy,
+        pred
+    )
+
     s_noisy = shap_exp.generate(img)
 
-    noisy_np = noisy.cpu().numpy()[0].transpose(1,2,0)
+    noisy_np = noisy.cpu().numpy()[0]
+
+    noisy_np = noisy_np.transpose(
+        1,
+        2,
+        0
+    )
 
     noisy_rgb = np.repeat(
         noisy_np,
@@ -195,26 +256,49 @@ for img, lbl, pred in failures[:100]:
         axis=2
     )
 
-    l_noisy = lime_exp.generate(noisy_rgb)
+    l_noisy = lime_exp.generate(
+        noisy_rgb
+    )
 
     noisy_outputs = {
 
-        "gradcam": cmb.gradcam_only(g_noisy),
+        "gradcam": cmb.gradcam_only(
+            g_noisy
+        ),
 
-        "shap": cmb.shap_only(s_noisy),
+        "shap": cmb.shap_only(
+            s_noisy
+        ),
 
-        "lime": cmb.lime_only(l_noisy),
+        "lime": cmb.lime_only(
+            l_noisy
+        ),
 
-        "g+s": cmb.g_s(g_noisy, s_noisy),
+        "g+s": cmb.g_s(
+            g_noisy,
+            s_noisy
+        ),
 
-        "g+l": cmb.g_l(g_noisy, l_noisy),
+        "g+l": cmb.g_l(
+            g_noisy,
+            l_noisy
+        ),
 
-        "s+l": cmb.s_l(s_noisy, l_noisy),
+        "s+l": cmb.s_l(
+            s_noisy,
+            l_noisy
+        ),
 
-        "all": cmb.all_three(g_noisy, s_noisy, l_noisy)
+        "all": cmb.all_three(
+            g_noisy,
+            s_noisy,
+            l_noisy
+        )
     }
 
-    # -------- Metrics per method --------
+    # ========================================
+    # METRICS
+    # ========================================
     for k, exp in outputs.items():
 
         start = time.time()
@@ -237,24 +321,30 @@ for img, lbl, pred in failures[:100]:
 
         t = time.time() - start
 
-        methods[k].append(exp.flatten())
+        methods[k].append(
+            exp.flatten()
+        )
 
         metrics[k]["f"].append(f)
 
-        metrics[k]["s"].append(s_score)
+        metrics[k]["s"].append(
+            s_score
+        )
 
         metrics[k]["t"].append(t)
 
         metrics[k]["i"].append(i)
 
-# =========================
-# FINAL TABLE
-# =========================
+# ============================================
+# FINAL RESULTS TABLE
+# ============================================
 rows = []
 
 for k in methods:
 
-    sil, db = clustering(methods[k])
+    sil, db = clustering(
+        methods[k]
+    )
 
     f = np.mean(metrics[k]["f"])
 
@@ -291,36 +381,117 @@ for k in methods:
         "Score": score
     })
 
+# ============================================
+# DATAFRAME
+# ============================================
 df = pd.DataFrame(rows).sort_values(
     "Score",
     ascending=False
 )
 
-# =========================
-# SAVE RESULTS
-# =========================
-results_dir = ROOT_DIR / "results"
-
-results_dir.mkdir(exist_ok=True)
-
-RESULTS_DIR = ROOT_DIR / "results"
-
-RESULTS_DIR.mkdir(exist_ok=True)
-
+# ============================================
+# SAVE CSV
+# ============================================
 csv_path = RESULTS_DIR / "final_results.csv"
 
-df.to_csv(csv_path, index=False)
+df.to_csv(
+    csv_path,
+    index=False
+)
 
-print(f"\nCSV SAVED: {csv_path}")
+print("\nCSV SAVED:")
+print(csv_path)
 
-print(df)
+print("\n=========== FINAL SCORES ===========\n")
 
-# =========================
+print(
+    df[
+        [
+            "Method",
+            "Fidelity",
+            "Stability",
+            "Silhouette",
+            "DB",
+            "Interpretability",
+            "Score"
+        ]
+    ]
+)
+
+print("\n====================================\n")
+
+# ============================================
+# SELECT BEST METHOD
+# ============================================
+best_method = df.iloc[0]["Method"]
+
+print(
+    "\nBest explanation method:",
+    best_method
+)
+
+selected_explanations = (
+    all_explanations[best_method]
+)
+
+# ============================================
+# GENERATE RECOMMENDATIONS
+# ============================================
+recs, feature_summary = (
+    generate_adaptive_recommendations(
+        selected_explanations,
+        best_method
+    )
+)
+
+feature_df = pd.DataFrame(
+    [feature_summary]
+)
+
+feature_df.to_csv(
+    RESULTS_DIR /
+    "recommendation_features.csv",
+    index=False
+)
+
+# ============================================
+# PRINT RECOMMENDATIONS
+# ============================================
+print(
+    "\n===== XAIFA RECOMMENDATIONS ====="
+)
+
+for r in recs:
+    print("-", r)
+
+# ============================================
+# SAVE RECOMMENDATIONS
+# ============================================
+with open(
+    RESULTS_DIR /
+    "recommendations.txt",
+    "w"
+) as f:
+
+    f.write(
+        "===== XAIFA RECOMMENDATIONS =====\n\n"
+    )
+
+    f.write(
+        f"Best explanation method: "
+        f"{best_method}\n\n"
+    )
+
+    for i, r in enumerate(recs, 1):
+
+        f.write(f"{i}. {r}\n")
+
+# ============================================
 # PCA VISUALIZATION
-# =========================
+# ============================================
 plot_pca(
-    methods["g+s"],
-    "GradCAM+SHAP"
+    methods[best_method],
+    f"Best_{best_method}"
 )
 
 plot_pca(
@@ -328,6 +499,9 @@ plot_pca(
     "Combined"
 )
 
+# ============================================
+# FINAL LOGS
+# ============================================
 print("\n==============================")
 print("FINAL RESULTS CSV GENERATED")
 print("==============================")
@@ -335,4 +509,4 @@ print("==============================")
 print(df)
 
 print("\nCSV LOCATION:")
-print(ROOT_DIR / "results" / "final_results.csv")
+print(csv_path)

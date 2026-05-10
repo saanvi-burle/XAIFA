@@ -3,6 +3,7 @@ import Dashboard from './components/Dashboard'
 import Upload from './components/Upload'
 import Analysis from './components/Analysis'
 import Failures from './components/Failures'
+import Recommendations from './components/Recommendations'
 
 function App() {
   return (
@@ -15,6 +16,7 @@ function App() {
             <Link to="/upload">Upload</Link>
             <Link to="/analysis">Analysis</Link>
             <Link to="/failures">Failures</Link>
+            <Link to="/recommendations"> Recommendations</Link>
           </nav>
         </header>
         <main className="main">
@@ -23,6 +25,7 @@ function App() {
             <Route path="/upload" element={<Upload />} />
             <Route path="/analysis" element={<Analysis />} />
             <Route path="/failures" element={<Failures />} />
+            <Route path="/recommendations" element={<Recommendations />} />
           </Routes>
         </main>
       </div>
